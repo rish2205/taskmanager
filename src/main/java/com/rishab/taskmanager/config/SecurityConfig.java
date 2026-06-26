@@ -5,6 +5,7 @@ import com.rishab.taskmanager.service.UserDetailsServiceImpl;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -25,61 +26,57 @@ public class SecurityConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserDetailsServiceImpl userDetailsService;
 
-    // ─── 1. Define which routes are public and which are protected ──
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Disable CSRF - not needed for REST APIs using JWT
-            .csrf(csrf -> csrf.disable())
+                // IMPORTANT: enable CORS support in Spring Security
+                .cors(cors -> {})
 
-            // Define route permissions
-            .authorizeHttpRequests(auth -> auth
-                // These routes are PUBLIC - no token needed
-                .requestMatchers("/api/auth/**").permitAll()
-                // Everything else requires a valid token
-                .anyRequest().authenticated()
-            )
+                // Disable CSRF for JWT-based REST APIs
+                .csrf(csrf -> csrf.disable())
 
-            // Use STATELESS sessions - no server side sessions
-            // Every request must carry its own JWT token
-            .sessionManagement(session -> session
-                .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
-            )
+                // Route permissions
+                .authorizeHttpRequests(auth -> auth
+                        // VERY IMPORTANT: allow preflight OPTIONS requests
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
-            // Register our authentication provider
-            .authenticationProvider(authenticationProvider())
+                        // Public routes
+                        .requestMatchers("/api/auth/**").permitAll()
 
-            // Add our JwtAuthFilter BEFORE Spring's default login filter
-            .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
+                        // Protected routes
+                        .anyRequest().authenticated()
+                )
+
+                // Stateless session for JWT
+                .sessionManagement(session -> session
+                        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                )
+
+                // Authentication provider
+                .authenticationProvider(authenticationProvider())
+
+                // JWT filter before Spring default auth filter
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
 
-    // ─── 2. Password encoder - BCrypt hashing ───────────────────────
-    // BCrypt automatically salts and hashes passwords
-    // NEVER store plain text passwords
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ─── 3. Authentication provider ─────────────────────────────────
-    // Connects UserDetailsService + PasswordEncoder together
-    // Spring uses this to verify username and password during login
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userDetailsService);  // how to find the user
-        provider.setPasswordEncoder(passwordEncoder());       // how to verify password
+        provider.setUserDetailsService(userDetailsService);
+        provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 
-    // ─── 4. Authentication manager ──────────────────────────────────
-    // Used in AuthService to trigger the login verification process
     @Bean
     public AuthenticationManager authenticationManager(AuthenticationConfiguration config)
             throws Exception {
         return config.getAuthenticationManager();
     }
-
 }

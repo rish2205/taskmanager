@@ -15,9 +15,8 @@ import org.springframework.data.domain.Page;
 @RestController
 @RequestMapping("/api/tasks")
 @RequiredArgsConstructor
+@CrossOrigin(origins = "http://localhost:5173")
 public class TaskController {
-    
-
     
     private final TaskService taskService;
 
